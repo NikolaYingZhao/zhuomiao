@@ -5,9 +5,17 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>桌喵</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent !important;
+        overflow: hidden;
+      }
+    </style>
     %sveltekit.head%
   </head>
-  <body data-sveltekit-preload-data="hover" style="margin:0; background:transparent; overflow:hidden;">
+  <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>

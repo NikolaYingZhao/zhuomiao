@@ -3,6 +3,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import PetAnimation from '$lib/components/PetAnimation.svelte';
   import SpeechBubble from '$lib/components/SpeechBubble.svelte';
   import {
@@ -12,32 +13,16 @@
   import type { ActiveWindow, Task, MonitorRule } from '$lib/types';
   import { loadAll, setupAutoSave } from '$lib/services/persistence';
 
-  let dragOffset = { x: 0, y: 0 };
-  let isDragging = $state(false);
   let showBubble = $state(false);
   let currentMessage = $state('');
   let currentPetState = $state('idle');
   let showContextMenu = $state(false);
-  let contextMenuPos = { x: 0, y: 0 };
+  let contextMenuPos = $state({ x: 0, y: 0 });
 
   const appWindow = getCurrentWindow();
 
-  async function startDrag(e: MouseEvent) {
-    isDragging = true;
-    dragOffset = { x: e.clientX, y: e.clientY };
-  }
-
-  async function onDrag(e: MouseEvent) {
-    if (!isDragging) return;
-    const dx = e.clientX - dragOffset.x;
-    const dy = e.clientY - dragOffset.y;
-    dragOffset = { x: e.clientX, y: e.clientY };
-    const pos = await appWindow.outerPosition();
-    await appWindow.setPosition({ x: pos.x + dx, y: pos.y + dy });
-  }
-
-  function stopDrag() {
-    isDragging = false;
+  async function startDrag() {
+    await appWindow.startDragging();
   }
 
   function showSpeech(msg: string, state: string = 'worried') {
@@ -49,22 +34,32 @@
 
   async function openPanel() {
     isPanelOpen.set(true);
-    const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-    let panelWin = await WebviewWindow.getByLabel('panel');
-    if (panelWin) {
-      await panelWin.show();
-      await panelWin.setFocus();
+    try {
+      const panelWin = await WebviewWindow.getByLabel('panel');
+      if (panelWin) {
+        await panelWin.show();
+        await panelWin.setFocus();
+      }
+    } catch (e) {
+      console.error('打开面板失败:', e);
     }
   }
 
   async function openSettings() {
     isSettingsOpen.set(true);
-    const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-    let settingsWin = await WebviewWindow.getByLabel('settings');
-    if (settingsWin) {
-      await settingsWin.show();
-      await settingsWin.setFocus();
+    try {
+      const settingsWin = await WebviewWindow.getByLabel('settings');
+      if (settingsWin) {
+        await settingsWin.show();
+        await settingsWin.setFocus();
+      }
+    } catch (e) {
+      console.error('打开设置失败:', e);
     }
+  }
+
+  async function quitApp() {
+    await appWindow.destroy();
   }
 
   async function checkActivity() {
@@ -155,7 +150,7 @@
   }
 </script>
 
-<svelte:document onmousemove={onDrag} onmouseup={stopDrag} onclick={closeContextMenu} />
+<svelte:document onclick={closeContextMenu} />
 
 <div class="pet-window" oncontextmenu={handleContextMenu}>
   <div class="pet-area" onmousedown={startDrag}>
@@ -167,6 +162,7 @@
     <button class="action-btn" onclick={addQuickTask} title="快速添加任务">📝</button>
     <button class="action-btn" onclick={openPanel} title="任务面板">📋</button>
     <button class="action-btn" onclick={openSettings} title="设置">⚙️</button>
+    <button class="action-btn action-btn-exit" onclick={quitApp} title="退出">✕</button>
   </div>
 </div>
 
@@ -177,18 +173,20 @@
     <button onclick={openSettings}>⚙️ 设置</button>
     <hr />
     <button onclick={() => { currentPetState = 'sleeping'; showSpeech('晚安～我睡一会儿', 'sleeping'); }}>😴 休息</button>
+    <hr />
+    <button class="exit-btn" onclick={quitApp}>退出桌喵</button>
   </div>
 {/if}
 
 <style>
   :global(body) {
     margin: 0;
-    background: transparent;
+    background: transparent !important;
     overflow: hidden;
     user-select: none;
   }
   :global(html) {
-    background: transparent;
+    background: transparent !important;
   }
 
   .pet-window {
@@ -196,9 +194,10 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     padding-bottom: 8px;
+    background: transparent;
   }
 
   .pet-area {
@@ -236,6 +235,16 @@
     background: rgba(255, 159, 67, 0.15);
   }
 
+  .action-btn-exit {
+    font-size: 14px;
+    color: #999;
+    font-weight: bold;
+  }
+  .action-btn-exit:hover {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+  }
+
   .context-menu {
     position: fixed;
     background: white;
@@ -260,6 +269,10 @@
 
   .context-menu button:hover {
     background: #fff3e0;
+  }
+
+  .exit-btn {
+    color: #f44336 !important;
   }
 
   .context-menu hr {
