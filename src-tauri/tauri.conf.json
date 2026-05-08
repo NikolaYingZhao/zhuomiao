@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "zhuomiao",
+  "version": "0.1.0",
+  "identifier": "com.nikol.zhuomiao",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "pet",
+        "title": "桌喵",
+        "width": 280,
+        "height": 320,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "x": 100,
+        "y": 400
+      },
+      {
+        "label": "panel",
+        "url": "/panel",
+        "title": "桌喵 - 任务面板",
+        "width": 380,
+        "height": 520,
+        "decorations": true,
+        "visible": false,
+        "resizable": true,
+        "x": 400,
+        "y": 200
+      },
+      {
+        "label": "settings",
+        "url": "/settings",
+        "title": "桌喵 - 设置",
+        "width": 480,
+        "height": 600,
+        "decorations": true,
+        "visible": false,
+        "resizable": false,
+        "x": 500,
+        "y": 150
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
