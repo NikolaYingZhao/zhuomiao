@@ -14,7 +14,6 @@
   import type { ActiveWindow, Task, MonitorRule, PetState, ActivityRecord } from '$lib/types';
   import { loadAll, saveAll, setupAutoSave } from '$lib/services/persistence';
   import { chatWithAI, classifyActivity } from '$lib/services/ai';
-  import { guessActivityType } from '$lib/services/ai';
 
   let showBubble = $state(false);
   let currentMessage = $state('');
@@ -146,6 +145,11 @@
       if (matched) {
         if (config.apiKey) {
           try {
+            // 先用 classifyActivity 获取结构化分类 + 活动类型
+            const classification = await classifyActivity(
+              config, win.title, win.processName, incomplete.map(t => t.title)
+            );
+            // 再用 chatWithAI 获取可爱语气回复
             const taskList = incomplete.map(t => `- "${t.title}"（完成判断：${t.completionHint || t.title}）`).join('\n');
             const aiResult = await chatWithAI(
               config,
@@ -171,29 +175,33 @@ ${completionContext}
                 pendingConfirmTaskId = matchedTask.id;
                 showSpeech(`"${matchedTask.title}" 完成了吗？`, 'happy');
               }
-              recordActivity(win, 'productive', 'ai', guessActivityType(win.title, win.processName), aiResult);
+              recordActivity(win, 'productive', 'ai', classification.activityType, aiResult);
             } else if (aiResult && aiResult !== 'OK' && aiResult.length < 50) {
               showSpeech(aiResult, 'angry');
               lastAlertTime = now;
-              recordActivity(win, 'slacking', 'ai', guessActivityType(win.title, win.processName), aiResult);
+              recordActivity(win, 'slacking', 'ai', classification.activityType, aiResult);
             } else if (aiResult === 'OK') {
               const encourageTarget = incomplete[0]?.title || '任务';
               showSpeech(`在努力做${encourageTarget}吗？加油！`, 'happy');
-              recordActivity(win, 'productive', 'ai', guessActivityType(win.title, win.processName));
+              recordActivity(win, 'productive', 'ai', classification.activityType);
             }
           } catch (e) {
             console.error('AI监控请求失败，降级为规则匹配:', e);
             showSpeech(matchedMessage, 'angry');
             lastAlertTime = now;
-            recordActivity(win, 'slacking', 'rule_based', guessActivityType(win.title, win.processName));
+            recordActivity(win, 'slacking', 'rule_based');
           }
         } else {
           showSpeech(matchedMessage, 'angry');
           lastAlertTime = now;
-          recordActivity(win, 'slacking', 'rule_based', guessActivityType(win.title, win.processName));
+          recordActivity(win, 'slacking', 'rule_based');
         }
       } else if (config.apiKey && incomplete.length > 0) {
         try {
+          // 先用 classifyActivity 获取结构化分类 + 活动类型
+          const classification = await classifyActivity(
+            config, win.title, win.processName, incomplete.map(t => t.title)
+          );
           const taskContext = incomplete.map(t =>
             `- "${t.title}"（完成判断：${t.completionHint || t.title}）`
           ).join('\n');
@@ -218,17 +226,17 @@ ${completionContext}
               pendingConfirmTaskId = matchedTask.id;
               showSpeech(`"${matchedTask.title}" 完成了吗？`, 'happy');
             }
-            recordActivity(win, 'productive', 'ai', guessActivityType(win.title, win.processName), aiResult);
+            recordActivity(win, 'productive', 'ai', classification.activityType, aiResult);
           } else if (aiResult && aiResult !== 'OK' && aiResult.length < 30) {
             showSpeech(aiResult, 'happy');
             lastAlertTime = now;
-            recordActivity(win, 'productive', 'ai', guessActivityType(win.title, win.processName), aiResult);
+            recordActivity(win, classification.classification, 'ai', classification.activityType, aiResult);
           } else {
-            recordActivity(win, 'productive', 'ai', guessActivityType(win.title, win.processName));
+            recordActivity(win, classification.classification, 'ai', classification.activityType);
           }
         } catch (e) {
           console.error('AI监控请求失败（非黑名单分支）:', e);
-          recordActivity(win, 'productive', 'rule_based', guessActivityType(win.title, win.processName));
+          recordActivity(win, 'productive', 'rule_based');
         }
       }
     } catch (e) {
@@ -619,8 +627,8 @@ ${completionContext}
     background: white;
     border-radius: 10px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-    width: 400px;
-    max-height: 340px;
+    width: 420px;
+    max-height: 500px;
     overflow-y: auto;
     z-index: 100;
   }

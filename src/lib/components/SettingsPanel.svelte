@@ -310,16 +310,18 @@
   }
   .inline-field {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: flex-start;
+    gap: 6px;
   }
   .inline-field input[type="checkbox"] {
     width: auto;
-    margin: 0;
+    margin: 2px 0 0 0;
+    flex-shrink: 0;
   }
   .inline-field label {
     margin-bottom: 0;
     cursor: pointer;
+    line-height: 1.4;
   }
   .field input, .field textarea {
     width: 100%;

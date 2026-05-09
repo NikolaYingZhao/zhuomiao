@@ -70,20 +70,43 @@ export async function classifyActivity(
   }
 
   try {
-    const result = await chatWithAI(
-      config,
-      `用户正在使用：${windowTitle}（进程：${processName}）
-未完成任务：${incompleteTaskTitles.join('、') || '无'}
-请判断用户当前是在工作还是在摸鱼，并说明具体活动类型。
-回复格式：分类|活动类型
-- 分类：productive 或 slacking
-- 活动类型：简短描述具体行为，格式"动作-对象"（如"编程-VSCode"、"浏览网页-知乎"、"文档编辑-Word"、"聊天-微信"、"看视频-B站"）
-示例：productive|编程-VSCode
-示例：slacking|看视频-B站`
-    );
+    // Use a separate minimal prompt for structured classification only (no system prompt)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    const trimmed = result.trim();
-    const parts = trimmed.split('|');
+    const response = await fetch(`${config.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          {
+            role: 'system',
+            content: '你是一个活动分类助手。只回复一行，格式为：分类|活动类型。分类只能是 productive 或 slacking。活动类型格式：动作-对象（如 编程-VSCode、浏览网页-Chrome、看视频-B站、文档编辑-Word、聊天-微信、学习-网课）。不要回复任何其他内容。'
+          },
+          {
+            role: 'user',
+            content: `窗口标题：${windowTitle}\n进程名称：${processName}\n未完成任务：${incompleteTaskTitles.join('、') || '无'}`
+          }
+        ],
+        max_tokens: 30,
+        temperature: 0.1,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const result = (data.choices?.[0]?.message?.content || '').trim();
+    const parts = result.split('|');
     const classification: ActivityClassification = parts[0]?.toLowerCase().includes('slacking') ? 'slacking' : 'productive';
     const activityType = parts[1]?.trim() || guessActivityType(windowTitle, processName);
 
@@ -96,13 +119,42 @@ export async function classifyActivity(
 export function guessActivityType(windowTitle: string, processName: string): string {
   const title = windowTitle.toLowerCase();
   const proc = processName.toLowerCase();
-  if (proc.includes('code') || proc.includes('idea') || proc.includes('vim') || proc.includes('cursor')) return `编程-${processName}`;
-  if (proc.includes('chrome') || proc.includes('firefox') || proc.includes('edge') || proc.includes('browser')) return `浏览网页-${processName}`;
-  if (proc.includes('wechat') || proc.includes('qq') || proc.includes('telegram')) return `聊天-${processName}`;
-  if (proc.includes('word') || proc.includes('excel') || proc.includes('powerpoint') || proc.includes('wps')) return `文档编辑-${processName}`;
+
+  // Detect by process name first
+  if (proc.includes('code') || proc.includes('idea') || proc.includes('vim') || proc.includes('cursor') || proc.includes('studio')) return `编程-${processName}`;
+  if (proc.includes('wechat') || proc.includes('qq') || proc.includes('telegram') || proc.includes('dingtalk') || proc.includes('feishu') || proc.includes('slack')) return `聊天-${processName}`;
+  if (proc.includes('word') || proc.includes('excel') || proc.includes('powerpoint') || proc.includes('wps') || proc.includes('notion')) return `文档编辑-${processName}`;
+  if (proc.includes('obs') || proc.includes('zoom') || proc.includes('teams') || proc.includes('meeting')) return `会议-${processName}`;
+  if (proc.includes('chrome') || proc.includes('firefox') || proc.includes('edge') || proc.includes('browser')) {
+    // Try to detect what website from window title
+    if (title.includes('bilibili') || title.includes('b站')) return '看视频-B站';
+    if (title.includes('youtube')) return '看视频-YouTube';
+    if (title.includes('抖音') || title.includes('douyin')) return '看视频-抖音';
+    if (title.includes('小红书') || title.includes('xiaohongshu')) return '浏览-小红书';
+    if (title.includes('github') || title.includes('gitlab')) return '编程-GitHub';
+    if (title.includes('leetcode') || title.includes('力扣')) return '学习-刷题';
+    if (title.includes('zhihu') || title.includes('知乎')) return '浏览-知乎';
+    if (title.includes('csdn') || title.includes('stackoverflow')) return '学习-技术';
+    if (title.includes(' - ') && title.includes('- ')) {
+      // Try to extract site name from typical browser title format "Page Title - Site"
+      const parts = title.split(' - ');
+      if (parts.length >= 2) return `浏览网页-${parts[parts.length - 1].trim()}`;
+    }
+    return `浏览网页-${processName}`;
+  }
+
+  // Detect by window title
   if (title.includes('bilibili') || title.includes('b站')) return '看视频-B站';
+  if (title.includes('youtube')) return '看视频-YouTube';
   if (title.includes('抖音') || title.includes('douyin')) return '看视频-抖音';
   if (title.includes('小红书') || title.includes('xiaohongshu')) return '浏览-小红书';
+  if (title.includes(' - word') || title.includes('.doc')) return '文档编辑-Word';
+  if (title.includes(' - excel') || title.includes('.xls')) return '文档编辑-Excel';
+  if (title.includes(' - powerpoint') || title.includes('.ppt')) return '文档编辑-PPT';
+  if (title.includes('visual studio code')) return '编程-VSCode';
+  if (title.includes('intellij idea')) return '编程-IDEA';
+  if (title.includes('pycharm')) return '编程-PyCharm';
+
   return `使用-${processName}`;
 }
 
