@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { Task, PetState, MonitorRule, AIConfig, ActiveWindow, ActivityRecord } from '$lib/types';
+import type { Task, PetState, MonitorRule, AIConfig, ActiveWindow, ActivityRecord, ChatMessage, DbStatusInfo } from '$lib/types';
 
 function createTaskStore() {
   const { subscribe, set, update } = writable<Task[]>([]);
@@ -63,3 +63,5 @@ export const aiConfig = writable<AIConfig>({
   systemPrompt: '你是桌喵，一只住在用户桌面上的小猫咪。你会监督用户完成任务，当用户摸鱼时你会生气地提醒，当用户完成任务时你会开心地夸奖。你的语气可爱但坚定。',
 });
 export const activityRecords = writable<ActivityRecord[]>([]);
+export const dbStatus = writable<DbStatusInfo>({ available: true, mode: 'mysql' });
+export const chatMessages = writable<ChatMessage[]>([]);

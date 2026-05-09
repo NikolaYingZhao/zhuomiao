@@ -7,12 +7,13 @@
   import PetAnimation from '$lib/components/PetAnimation.svelte';
   import SpeechBubble from '$lib/components/SpeechBubble.svelte';
   import ActivityChart from '$lib/components/ActivityChart.svelte';
+  import QuickChat from '$lib/components/QuickChat.svelte';
   import {
     petState, petMessage, isPanelOpen, isSettingsOpen,
     tasks, monitorRules, activeWindow, aiConfig, activityRecords
   } from '$lib/stores';
   import type { ActiveWindow, Task, MonitorRule, PetState, ActivityRecord } from '$lib/types';
-  import { loadAll, saveAll, setupAutoSave } from '$lib/services/persistence';
+  import { loadAllFromDB, saveAll, setupAutoSave, toggleTask as persistToggleTask, createTask as persistCreateTask, removeTask as persistRemoveTask, updateTask as persistUpdateTask } from '$lib/services/persistence';
   import { chatWithAI, classifyActivity } from '$lib/services/ai';
 
   let showBubble = $state(false);
@@ -48,7 +49,7 @@
           url: '/panel',
           title: '桌喵 - 任务面板',
           width: 420,
-          height: 560,
+          height: 640,
           decorations: true,
           resizable: true,
           x: 400,
@@ -286,14 +287,13 @@ ${completionContext}
   async function confirmTaskCompletion() {
     if (!pendingConfirmTaskId) return;
     const id = pendingConfirmTaskId;
-    tasks.toggle(id, 'ai_detected');
     pendingConfirmTaskId = null;
     try {
-      await saveAll();
+      await persistToggleTask(id, 'ai_detected');
       showSpeech('太棒了！又完成一个！', 'happy');
     } catch (e) {
-      tasks.toggle(id);
       console.error('完成任务持久化失败:', e);
+      showSpeech('保存失败，请重试', 'worried');
     }
   }
 
@@ -318,7 +318,7 @@ ${completionContext}
   }
 
   onMount(() => {
-    loadAll().then(async () => {
+    loadAllFromDB().then(async () => {
       try {
         const data = await invoke<ActivityRecord[] | null>('load_app_data', { key: 'activity-records' });
         if (data) activityRecords.set(data);
@@ -369,11 +369,15 @@ ${completionContext}
 
   let showQuickTaskInput = $state(false);
   let quickTaskTitle = $state('');
+  let enableChat = $state(false);
+  let showChatPanel = $state(false);
+  let chatTaskContext = $state<{ tasks: Task[]; currentTaskId?: string } | null>(null);
 
   async function addQuickTask() {
     closeContextMenu();
     showQuickTaskInput = true;
     quickTaskTitle = '';
+    enableChat = false;
   }
 
   async function submitQuickTask() {
@@ -394,12 +398,21 @@ ${completionContext}
     const hint = await getCompletionHint(quickTaskTitle.trim());
     task.completionHint = hint;
 
-    tasks.add(task);
-    await saveAll();
+    try {
+      await persistCreateTask(task);
+      tasks.add(task);
+    } catch (e) {
+      console.error('快速添加任务失败:', e);
+    }
+
     showQuickTaskInput = false;
+    const taskTitle = quickTaskTitle.trim();
     quickTaskTitle = '';
 
-    if (hint) {
+    if (enableChat) {
+      chatTaskContext = { tasks: $tasks, currentTaskId: task.id };
+      showChatPanel = true;
+    } else if (hint) {
       showSpeech(`收到！完成提示：${hint}`, 'happy');
     } else {
       showSpeech('收到！我帮你记下了～加油哦！', 'happy');
@@ -438,6 +451,10 @@ ${completionContext}
       <button class="quick-task-ok" onclick={submitQuickTask}>✓</button>
       <button class="quick-task-cancel" onclick={cancelQuickTask}>✕</button>
     </div>
+    <label class="chat-toggle">
+      <input type="checkbox" bind:checked={enableChat} />
+      <span>与桌喵聊天</span>
+    </label>
   {/if}
 
   <div class="action-bar">
@@ -463,6 +480,14 @@ ${completionContext}
       </div>
       <ActivityChart records={$activityRecords} onCalibrate={calibrateActivity} />
     </div>
+  {/if}
+
+  {#if showChatPanel && chatTaskContext}
+    <QuickChat
+      visible={true}
+      taskContext={chatTaskContext}
+      onClose={() => { showChatPanel = false; chatTaskContext = null; }}
+    />
   {/if}
 </div>
 
@@ -596,6 +621,21 @@ ${completionContext}
     background: rgba(0, 0, 0, 0.05);
     color: #f44336;
   }
+  .chat-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #ff9f43;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    padding: 2px 8px;
+    margin-bottom: 2px;
+  }
+  .chat-toggle input {
+    margin: 0;
+  }
   .confirm-btn, .deny-btn {
     border: none;
     border-radius: 6px;
@@ -628,7 +668,7 @@ ${completionContext}
     border-radius: 10px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.15);
     width: 420px;
-    max-height: 500px;
+    max-height: 600px;
     overflow-y: auto;
     z-index: 100;
   }

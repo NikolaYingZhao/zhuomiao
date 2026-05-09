@@ -3,12 +3,12 @@
   import TaskPanel from '$lib/components/TaskPanel.svelte';
   import { tasks, monitorRules } from '$lib/stores';
   import type { Task, MonitorRule } from '$lib/types';
-  import { loadAll, saveAll } from '$lib/services/persistence';
+  import { loadAllFromDB, saveAll } from '$lib/services/persistence';
 
   let ready = $state(false);
 
   onMount(() => {
-    loadAll().then(() => { ready = true; });
+    loadAllFromDB().then(() => { ready = true; });
   });
 
   async function onDataChange() {

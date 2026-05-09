@@ -48,3 +48,35 @@ export interface ActivityRecord {
   aiComment?: string;
   taskId?: string;
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export type TaskAction =
+  | { type: 'complete'; taskId: string }
+  | { type: 'updateHint'; taskId: string; newHint: string };
+
+export interface ChatResponse {
+  message: string;
+  action?: TaskAction;
+}
+
+export interface DbStatusInfo {
+  available: boolean;
+  mode: 'mysql' | 'file';
+}
+
+export interface MigrationReport {
+  successCount: number;
+  skipCount: number;
+  errorCount: number;
+  errors: string[];
+}
+
+export interface TaskChatContext {
+  tasks: Task[];
+  currentTaskId?: string;
+}

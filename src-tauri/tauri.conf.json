@@ -30,7 +30,7 @@
         "url": "/panel",
         "title": "桌喵 - 任务面板",
         "width": 420,
-        "height": 560,
+        "height": 640,
         "decorations": true,
         "visible": false,
         "resizable": true,

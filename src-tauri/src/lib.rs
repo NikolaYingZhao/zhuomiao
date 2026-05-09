@@ -1,3 +1,8 @@
+mod db;
+mod models;
+mod commands;
+
+use commands::{task, activity, rule, config, migration};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -238,10 +243,36 @@ fn load_app_data(app: tauri::AppHandle, key: String) -> Result<Option<serde_json
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = dotenvy::dotenv();
+
+    let db_state = match std::env::var("DATABASE_URL") {
+        Ok(url) => {
+            let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+            match rt.block_on(async {
+                let state = db::DbState::connect(&url).await?;
+                if let Some(pool) = state.pool() {
+                    db::run_migrations(pool).await?;
+                }
+                Ok::<db::DbState, String>(state)
+            }) {
+                Ok(state) => state,
+                Err(e) => {
+                    eprintln!("数据库连接失败，降级为本地文件存储模式: {}", e);
+                    db::DbState::file_mode()
+                }
+            }
+        }
+        Err(_) => {
+            eprintln!("未配置DATABASE_URL，使用本地文件存储模式");
+            db::DbState::file_mode()
+        }
+    };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .manage(db_state)
         .invoke_handler(tauri::generate_handler![
             get_active_window,
             check_fish_detection,
@@ -250,6 +281,22 @@ pub fn run() {
             set_data_dir,
             save_app_data,
             load_app_data,
+            task::db_task_create,
+            task::db_task_remove,
+            task::db_task_update,
+            task::db_task_list,
+            task::db_task_clear_completed,
+            task::db_task_toggle,
+            activity::db_activity_create,
+            activity::db_activity_list,
+            activity::db_activity_calibrate,
+            rule::db_rule_list,
+            rule::db_rule_save,
+            config::db_config_get,
+            config::db_config_save,
+            config::db_status,
+            config::db_connect,
+            migration::migrate_from_json,
         ])
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "显示桌喵", true, None::<&str>)?;

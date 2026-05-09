@@ -211,6 +211,10 @@
     padding: 10px;
     font-size: 12px;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100% - 40px);
+    overflow-y: auto;
   }
   .chart-header {
     display: flex;
@@ -326,6 +330,8 @@
     margin-top: 12px;
     border-top: 1px solid #eee;
     padding-top: 8px;
+    max-height: 200px;
+    overflow-y: auto;
   }
   .record-list h4 {
     margin: 0 0 6px 0;

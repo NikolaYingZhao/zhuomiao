@@ -2,7 +2,7 @@
   import { tasks, incompleteTasks, completedTasks, aiConfig } from '$lib/stores';
   import TaskItem from './TaskItem.svelte';
   import type { Task } from '$lib/types';
-  import { saveAll } from '$lib/services/persistence';
+  import { removeTask, toggleTask, clearCompleted, createTask } from '$lib/services/persistence';
   import { chatWithAI } from '$lib/services/ai';
   import { ask } from '@tauri-apps/plugin-dialog';
 
@@ -45,11 +45,15 @@
     const hint = await getCompletionHint(newTitle.trim());
     task.completionHint = hint;
 
-    tasks.add(task);
+    try {
+      await createTask(task);
+      tasks.add(task);
+    } catch (e) {
+      console.error('添加任务失败:', e);
+    }
     newTitle = '';
     newDueDate = '';
     showAddForm = false;
-    await saveAll();
 
     if (hint) {
       addStatus = `完成提示：${hint}`;
@@ -70,22 +74,17 @@
     });
     if (!confirmed) return;
 
-    const task = $tasks.find(t => t.id === id);
-    tasks.remove(id);
     try {
-      await saveAll();
+      await removeTask(id);
     } catch (e) {
-      if (task) tasks.add(task);
       console.error('删除任务持久化失败:', e);
     }
   }
 
   async function handleToggle(id: string) {
-    tasks.toggle(id, 'manual');
     try {
-      await saveAll();
+      await toggleTask(id, 'manual');
     } catch (e) {
-      tasks.toggle(id);
       console.error('完成标记持久化失败:', e);
     }
   }
@@ -97,9 +96,8 @@
   );
 
   async function handleClearCompleted() {
-    tasks.clearCompleted();
     try {
-      await saveAll();
+      await clearCompleted();
     } catch (e) {
       console.error('清除已完成持久化失败:', e);
     }
@@ -181,9 +179,11 @@
 
 <style>
   .panel {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
     padding: 16px;
-    height: 100%;
-    overflow-y: auto;
+    box-sizing: border-box;
   }
   .panel-header {
     margin-bottom: 12px;
@@ -281,6 +281,8 @@
   }
   .task-list {
     flex: 1;
+    overflow-y: auto;
+    min-height: 0;
   }
   .empty {
     text-align: center;
@@ -298,6 +300,7 @@
     cursor: pointer;
     font-size: 12px;
     margin-top: 8px;
+    flex-shrink: 0;
   }
   .clear-btn:hover {
     background: #f5f5f5;
