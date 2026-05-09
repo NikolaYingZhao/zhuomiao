@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-save-app-data"
+description = "Enables the save_app_data command without any pre-configured scope."
+commands.allow = ["save_app_data"]
+
+[[permission]]
+identifier = "deny-save-app-data"
+description = "Denies the save_app_data command without any pre-configured scope."
+commands.deny = ["save_app_data"]

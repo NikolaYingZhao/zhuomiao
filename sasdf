@@ -1,0 +1,21 @@
+warning: in the working copy of 'src-tauri/Cargo.lock', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src-tauri/Cargo.toml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src-tauri/capabilities/default.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src-tauri/tauri.conf.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/components/SettingsPanel.svelte', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/components/TaskPanel.svelte', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/types/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/routes/+page.svelte', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/routes/panel/+page.svelte', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/routes/settings/+page.svelte', LF will be replaced by CRLF the next time Git touches it
+package.json
+src-tauri/Cargo.lock
+src-tauri/Cargo.toml
+src-tauri/capabilities/default.json
+src-tauri/tauri.conf.json
+src/lib/components/SettingsPanel.svelte
+src/lib/components/TaskPanel.svelte
+src/lib/types/index.ts
+src/routes/+page.svelte
+src/routes/panel/+page.svelte
+src/routes/settings/+page.svelte

@@ -1,6 +1,6 @@
 {
   "name": "zhuomiao",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "桌喵 - 智能桌面宠物精灵，帮你管理任务、监督摸鱼",
   "type": "module",
   "scripts": {

@@ -4,6 +4,7 @@
   import { getDataDir, setDataDir, saveAll } from '$lib/services/persistence';
   import type { AppDataDir } from '$lib/services/persistence';
   import { open } from '@tauri-apps/plugin-dialog';
+  import { validateAiConfig } from '$lib/services/ai';
 
   let tab = $state<'general' | 'monitor' | 'ai'>('general');
 
@@ -12,6 +13,15 @@
   let dataDir = $state<AppDataDir>({ path: '', isDefault: true });
   let dataDirInput = $state('');
   let dataDirStatus = $state<string | null>(null);
+  let saveStatus = $state<string | null>(null);
+  let isSaving = $state(false);
+  let testStatus = $state<string | null>(null);
+  let isTesting = $state(false);
+
+  function sanitizeError(e: any): string {
+    const msg = String(e?.message || e);
+    return msg.replace(/sk-[a-zA-Z0-9]{10,}/g, 'sk-***');
+  }
 
   async function loadDataDirInfo() {
     try {
@@ -52,12 +62,66 @@
   let newMessage = $state('不是应该在学习吗？怎么在摸鱼啊！');
   let newIsBlacklist = $state(true);
 
-  function saveAiConfig() {
-    aiConfig.set(localAiConfig);
-    saveAll();
+  async function saveAiConfig() {
+    isSaving = true;
+    saveStatus = null;
+
+    try {
+      const validation = await validateAiConfig(localAiConfig);
+      if (!validation.success) {
+        saveStatus = `error:${validation.error || 'API 配置有误，请检查 API-Key 和对应的响应地址'}`;
+        setTimeout(() => { saveStatus = null; }, 8000);
+        console.error('API验证失败:', validation.errorType, validation.error);
+        return;
+      }
+
+      const oldConfig = { ...$aiConfig };
+      aiConfig.set(localAiConfig);
+
+      try {
+        await saveAll();
+        saveStatus = 'success:API 配置成功！';
+        setTimeout(() => { saveStatus = null; }, 5000);
+      } catch (e: any) {
+        aiConfig.set(oldConfig);
+        localAiConfig = { ...oldConfig };
+        saveStatus = `error:API 验证通过，但保存失败: ${sanitizeError(e)}`;
+        setTimeout(() => { saveStatus = null; }, 8000);
+        console.error('保存AI配置失败:', e);
+      }
+    } catch (e: any) {
+      saveStatus = `error:验证过程出错: ${sanitizeError(e)}`;
+      setTimeout(() => { saveStatus = null; }, 8000);
+      console.error('验证过程出错:', e);
+    } finally {
+      isSaving = false;
+    }
   }
 
-  function addRule() {
+  async function testConnection() {
+    if (!localAiConfig.endpoint || !localAiConfig.apiKey) {
+      testStatus = 'error:请先填写 API 端点和 API Key';
+      setTimeout(() => { testStatus = null; }, 5000);
+      return;
+    }
+    isTesting = true;
+    testStatus = null;
+    try {
+      const validation = await validateAiConfig(localAiConfig);
+      if (validation.success) {
+        testStatus = 'success:API 连接成功！配置有效';
+      } else {
+        testStatus = `error:${validation.error || 'API 连接失败，请检查配置'}`;
+      }
+    } catch (e: any) {
+      testStatus = `error:测试失败: ${sanitizeError(e)}`;
+    } finally {
+      isTesting = false;
+      setTimeout(() => { testStatus = null; }, 8000);
+    }
+  }
+
+  async function addRule() {
     if (!newPattern.trim()) return;
     const rule: MonitorRule = {
       id: crypto.randomUUID(),
@@ -69,13 +133,13 @@
     localRules = [...localRules, rule];
     monitorRules.set(localRules);
     newPattern = '';
-    saveAll();
+    await saveAll();
   }
 
-  function removeRule(id: string) {
+  async function removeRule(id: string) {
     localRules = localRules.filter(r => r.id !== id);
     monitorRules.set(localRules);
-    saveAll();
+    await saveAll();
   }
 </script>
 
@@ -89,13 +153,13 @@
   {#if tab === 'general'}
     <div class="section">
       <h3>通用设置</h3>
-      <div class="field">
-        <label>开机自启动</label>
-        <input type="checkbox" />
+      <div class="field inline-field">
+        <input type="checkbox" id="autostart" />
+        <label for="autostart">开机自启动</label>
       </div>
       <div class="field">
         <label>监控检查间隔（秒）</label>
-        <input type="number" value="10" min="5" max="300" />
+        <input type="number" value="45" min="5" max="300" />
       </div>
       <div class="field">
         <label>提醒气泡显示时长（秒）</label>
@@ -143,7 +207,7 @@
             <span class="rule-pattern">{rule.pattern}</span>
             <span class="rule-type">{rule.isBlacklist ? '黑名单' : '白名单'}</span>
             <span class="rule-msg">"{rule.message}"</span>
-            <button class="remove-btn" onclick={() => removeRule(rule.id)}>×</button>
+            <button class="remove-btn" onclick={() => removeRule(rule.id)}>x</button>
           </div>
         {/each}
         {#if localRules.length === 0}
@@ -154,7 +218,7 @@
   {:else if tab === 'ai'}
     <div class="section">
       <h3>AI 对话配置</h3>
-      <p class="hint">配置 API 后桌喵可以用 AI 生成个性化提醒</p>
+      <p class="hint">配置 API 后桌喵可以用 AI 智能判断你在摸鱼还是做正事</p>
 
       <div class="field">
         <label>API 端点</label>
@@ -172,7 +236,28 @@
         <label>系统提示词</label>
         <textarea bind:value={localAiConfig.systemPrompt} rows="4"></textarea>
       </div>
-      <button class="save-btn" onclick={saveAiConfig}>保存配置</button>
+      <div class="btn-row">
+        <button class="test-btn" onclick={testConnection} disabled={isTesting}>
+          {isTesting ? '测试中...' : '测试连接'}
+        </button>
+        <button class="save-btn" onclick={saveAiConfig} disabled={isSaving}>
+          {isSaving ? '验证中...' : '保存配置'}
+        </button>
+      </div>
+      {#if testStatus}
+        {@const isTestSuccess = testStatus.startsWith('success:')}
+        {@const testMsg = testStatus.replace(/^(success|error):/, '')}
+        <p class="status-msg" class:success={isTestSuccess} class:error={!isTestSuccess}>
+          {testMsg}
+        </p>
+      {/if}
+      {#if saveStatus}
+        {@const isSuccess = saveStatus.startsWith('success:')}
+        {@const msg = saveStatus.replace(/^(success|error):/, '')}
+        <p class="status-msg" class:success={isSuccess} class:error={!isSuccess}>
+          {msg}
+        </p>
+      {/if}
     </div>
   {/if}
 </div>
@@ -222,6 +307,19 @@
     font-size: 13px;
     color: #555;
     margin-bottom: 4px;
+  }
+  .inline-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .inline-field input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+  }
+  .inline-field label {
+    margin-bottom: 0;
+    cursor: pointer;
   }
   .field input, .field textarea {
     width: 100%;
@@ -300,8 +398,30 @@
     font-size: 12px;
     text-align: center;
   }
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .test-btn {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ff9f43;
+    border-radius: 6px;
+    background: white;
+    color: #ff9f43;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .test-btn:hover:not(:disabled) {
+    background: #fff8f0;
+  }
+  .test-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
   .save-btn {
-    width: 100%;
+    flex: 1;
     padding: 8px;
     border: none;
     border-radius: 6px;
@@ -346,5 +466,16 @@
     font-size: 12px;
     color: #4caf50;
     margin: 4px 0;
+  }
+  .status-msg.success {
+    color: #4caf50;
+  }
+  .status-msg.error {
+    color: #f44336;
+    font-weight: 600;
+  }
+  .save-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>

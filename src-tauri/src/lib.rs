@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, menu::{Menu, MenuItem}, tray::TrayIconBuilder};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -251,6 +251,40 @@ pub fn run() {
             save_app_data,
             load_app_data,
         ])
+        .setup(|app| {
+            let show_item = MenuItem::with_id(app, "show", "显示桌喵", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "彻底退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .tooltip("桌喵 - 桌面宠物精灵")
+                .icon(app.default_window_icon().cloned().expect("no default window icon"))
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "show" => {
+                            if let Some(w) = app.get_webview_window("pet") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, _event| {
+                    let app = tray.app_handle();
+                    if let Some(w) = app.get_webview_window("pet") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

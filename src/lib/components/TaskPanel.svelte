@@ -1,7 +1,10 @@
 <script lang="ts">
-  import { tasks, incompleteTasks, completedTasks } from '$lib/stores';
+  import { tasks, incompleteTasks, completedTasks, aiConfig } from '$lib/stores';
   import TaskItem from './TaskItem.svelte';
   import type { Task } from '$lib/types';
+  import { saveAll } from '$lib/services/persistence';
+  import { chatWithAI } from '$lib/services/ai';
+  import { ask } from '@tauri-apps/plugin-dialog';
 
   let newTitle = $state('');
   let newCategory = $state('学习');
@@ -9,10 +12,25 @@
   let newDueDate = $state('');
   let filterCategory = $state('all');
   let showAddForm = $state(false);
+  let addStatus = $state<string | null>(null);
 
   const categories = ['学习', '工作', '生活', '运动', '阅读', '其他'];
 
-  function addTask() {
+  async function getCompletionHint(taskTitle: string): Promise<string> {
+    const config = $aiConfig;
+    if (!config.apiKey) return '';
+    try {
+      const result = await chatWithAI(
+        config,
+        `用户创建了任务："${taskTitle}"。请用一句话说明如何判断这个任务是否完成（15字以内）。例如："关闭文档即完成" 或 "运行测试通过即完成"。`
+      );
+      return result || '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function addTask() {
     if (!newTitle.trim()) return;
     const task: Task = {
       id: crypto.randomUUID(),
@@ -23,14 +41,53 @@
       completed: false,
       createdAt: new Date().toISOString(),
     };
+
+    const hint = await getCompletionHint(newTitle.trim());
+    task.completionHint = hint;
+
     tasks.add(task);
     newTitle = '';
     newDueDate = '';
     showAddForm = false;
+    await saveAll();
+
+    if (hint) {
+      addStatus = `完成提示：${hint}`;
+      setTimeout(() => { addStatus = null; }, 5000);
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') addTask();
+  }
+
+  async function handleDelete(id: string) {
+    const confirmed = await ask('确定删除该任务？', {
+      title: '删除确认',
+      kind: 'warning',
+      okLabel: '确定',
+      cancelLabel: '取消',
+    });
+    if (!confirmed) return;
+
+    const task = $tasks.find(t => t.id === id);
+    tasks.remove(id);
+    try {
+      await saveAll();
+    } catch (e) {
+      if (task) tasks.add(task);
+      console.error('删除任务持久化失败:', e);
+    }
+  }
+
+  async function handleToggle(id: string) {
+    tasks.toggle(id, 'manual');
+    try {
+      await saveAll();
+    } catch (e) {
+      tasks.toggle(id);
+      console.error('完成标记持久化失败:', e);
+    }
   }
 
   let filteredTasks = $derived(
@@ -38,6 +95,15 @@
       ? $tasks
       : $tasks.filter(t => t.category === filterCategory)
   );
+
+  async function handleClearCompleted() {
+    tasks.clearCompleted();
+    try {
+      await saveAll();
+    } catch (e) {
+      console.error('清除已完成持久化失败:', e);
+    }
+  }
 
   let completionRate = $derived(
     $tasks.length > 0 ? Math.round(($completedTasks.length / $tasks.length) * 100) : 0
@@ -90,8 +156,8 @@
     {#each filteredTasks as task (task.id)}
       <TaskItem
         {task}
-        onToggle={(id) => tasks.toggle(id)}
-        onDelete={(id) => tasks.remove(id)}
+        onToggle={handleToggle}
+        onDelete={handleDelete}
       />
     {/each}
     {#if filteredTasks.length === 0}
@@ -100,9 +166,16 @@
   </div>
 
   {#if $completedTasks.length > 0}
-    <button class="clear-btn" onclick={() => tasks.clearCompleted()}>
+    <button class="clear-btn" onclick={handleClearCompleted}>
       清除已完成 ({$completedTasks.length})
     </button>
+  {/if}
+
+  {#if addStatus}
+    <div class="hint-notification">
+      <span class="hint-icon">💡</span>
+      <span class="hint-text">{addStatus}</span>
+    </div>
   {/if}
 </div>
 
@@ -133,7 +206,7 @@
   .toolbar {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 12px;
     gap: 8px;
   }
@@ -142,6 +215,7 @@
     gap: 4px;
     flex-wrap: wrap;
     flex: 1;
+    min-width: 0;
   }
   .filter-btn {
     padding: 4px 8px;
@@ -227,5 +301,20 @@
   }
   .clear-btn:hover {
     background: #f5f5f5;
+  }
+  .hint-notification {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #e8f5e9;
+    border: 1px solid #c8e6c9;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #2e7d32;
+  }
+  .hint-icon {
+    font-size: 16px;
   }
 </style>

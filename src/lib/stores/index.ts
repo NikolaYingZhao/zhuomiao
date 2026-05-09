@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { Task, PetState, MonitorRule, AIConfig, ActiveWindow } from '$lib/types';
+import type { Task, PetState, MonitorRule, AIConfig, ActiveWindow, ActivityRecord } from '$lib/types';
 
 function createTaskStore() {
   const { subscribe, set, update } = writable<Task[]>([]);
@@ -13,8 +13,18 @@ function createTaskStore() {
     remove(id: string) {
       update(tasks => tasks.filter(t => t.id !== id));
     },
-    toggle(id: string) {
-      update(tasks => tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    toggle(id: string, completionMethod?: 'manual' | 'ai_detected') {
+      update(tasks => tasks.map(t =>
+        t.id === id
+          ? {
+              ...t,
+              completed: !t.completed,
+              completionMethod: !t.completed
+                ? (completionMethod ?? 'manual')
+                : null,
+            }
+          : t
+      ));
     },
     updateTask(id: string, patch: Partial<Task>) {
       update(tasks => tasks.map(t => t.id === id ? { ...t, ...patch } : t));
@@ -52,3 +62,4 @@ export const aiConfig = writable<AIConfig>({
   model: 'gpt-4o-mini',
   systemPrompt: '你是桌喵，一只住在用户桌面上的小猫咪。你会监督用户完成任务，当用户摸鱼时你会生气地提醒，当用户完成任务时你会开心地夸奖。你的语气可爱但坚定。',
 });
+export const activityRecords = writable<ActivityRecord[]>([]);

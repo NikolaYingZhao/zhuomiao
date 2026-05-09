@@ -1,0 +1,11 @@
+[default]
+description = "Default permissions for the app"
+permissions = [
+    "allow-get-active-window",
+    "allow-check-fish-detection",
+    "allow-start-monitor-cycle",
+    "allow-get-data-dir",
+    "allow-set-data-dir",
+    "allow-save-app-data",
+    "allow-load-app-data",
+]

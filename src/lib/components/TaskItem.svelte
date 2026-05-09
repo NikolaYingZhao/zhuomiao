@@ -7,8 +7,8 @@
     onDelete,
   }: {
     task: Task;
-    onToggle: (id: string) => void;
-    onDelete: (id: string) => void;
+    onToggle: (id: string) => Promise<void>;
+    onDelete: (id: string) => Promise<void>;
   } = $props();
 
   const priorityColors = {
@@ -38,9 +38,12 @@
       {#if task.dueDate}
         <span class="due">{task.dueDate}</span>
       {/if}
+      {#if task.completionHint}
+        <span class="hint-badge" title="完成检测提示">💡 {task.completionHint}</span>
+      {/if}
     </div>
   </div>
-  <button class="delete-btn" onclick={() => onDelete(task.id)}>×</button>
+  <button class="delete-btn" onclick={() => onDelete(task.id)} title="删除任务">✕</button>
 </div>
 
 <style>
@@ -85,10 +88,12 @@
   }
   .task-meta {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     font-size: 11px;
     color: #888;
     margin-top: 2px;
+    flex-wrap: wrap;
+    align-items: center;
   }
   .priority {
     font-weight: 600;
@@ -96,13 +101,35 @@
   .delete-btn {
     background: none;
     border: none;
-    color: #ccc;
+    color: #e57373;
     cursor: pointer;
-    font-size: 18px;
-    padding: 0 4px;
+    font-size: 16px;
+    padding: 4px;
+    min-width: 24px;
+    min-height: 24px;
     line-height: 1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
   }
   .delete-btn:hover {
     color: #f44336;
+    background: rgba(244, 67, 54, 0.08);
+  }
+  .hint-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
