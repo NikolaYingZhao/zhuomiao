@@ -1,9 +1,0 @@
-[[permission]]
-identifier = "allow-start-monitor-cycle"
-description = "Enables the start_monitor_cycle command without any pre-configured scope."
-commands.allow = ["start_monitor_cycle"]
-
-[[permission]]
-identifier = "deny-start-monitor-cycle"
-description = "Denies the start_monitor_cycle command without any pre-configured scope."
-commands.deny = ["start_monitor_cycle"]

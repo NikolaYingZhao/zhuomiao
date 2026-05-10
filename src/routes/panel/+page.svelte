@@ -1,19 +1,36 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import TaskPanel from '$lib/components/TaskPanel.svelte';
-  import { tasks, monitorRules } from '$lib/stores';
-  import type { Task, MonitorRule } from '$lib/types';
-  import { loadAllFromDB, saveAll } from '$lib/services/persistence';
+  import { loadAllFromDB } from '$lib/services/persistence';
+  import { initStoreSync } from '$lib/services/sync';
 
   let ready = $state(false);
 
+  // FIX: P0 — 每个 await 用独立 try-catch 包裹，无论如何最后都 ready = true
+  // FIX: P3 — 保存 unlisten 函数，组件销毁时清理
   onMount(() => {
-    loadAllFromDB().then(() => { ready = true; });
-  });
+    let unlisten: (() => void) | null = null;
 
-  async function onDataChange() {
-    await saveAll();
-  }
+    (async () => {
+      try {
+        unlisten = await initStoreSync();
+      } catch (e) {
+        console.error('[panel] initStoreSync 失败:', e);
+      }
+
+      try {
+        await loadAllFromDB();
+      } catch (e) {
+        console.error('[panel] loadAllFromDB 失败:', e);
+      }
+
+      ready = true;
+    })();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  });
 </script>
 
 {#if ready}

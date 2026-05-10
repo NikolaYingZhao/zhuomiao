@@ -4,20 +4,20 @@ use tauri::State;
 
 #[tauri::command]
 pub async fn db_rule_list(state: State<'_, DbState>) -> Result<Vec<DbMonitorRule>, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     sqlx::query_as::<_, DbMonitorRule>(
         r#"SELECT id, pattern, rule_type, is_blacklist, message FROM monitor_rules"#,
     )
-    .fetch_all(pool)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("查询监控规则失败: {}", e))
 }
 
 #[tauri::command]
 pub async fn db_rule_save(state: State<'_, DbState>, rules: Vec<DbMonitorRule>) -> Result<(), String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     sqlx::query("DELETE FROM monitor_rules")
-        .execute(pool)
+        .execute(&pool)
         .await
         .map_err(|e| format!("清除旧规则失败: {}", e))?;
 
@@ -30,7 +30,7 @@ pub async fn db_rule_save(state: State<'_, DbState>, rules: Vec<DbMonitorRule>) 
         .bind(&rule.rule_type)
         .bind(rule.is_blacklist)
         .bind(&rule.message)
-        .execute(pool)
+        .execute(&pool)
         .await
         .map_err(|e| format!("插入规则失败: {}", e))?;
     }

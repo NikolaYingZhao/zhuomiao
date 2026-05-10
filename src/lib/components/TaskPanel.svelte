@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { tasks, incompleteTasks, completedTasks, aiConfig } from '$lib/stores';
+  import { tasks, incompleteTasks, completedTasks } from '$lib/stores';
   import TaskItem from './TaskItem.svelte';
   import type { Task } from '$lib/types';
   import { removeTask, toggleTask, clearCompleted, createTask } from '$lib/services/persistence';
-  import { chatWithAI } from '$lib/services/ai';
+  import { getCompletionHint } from '$lib/services/ai';
   import { ask } from '@tauri-apps/plugin-dialog';
 
   let newTitle = $state('');
@@ -15,20 +15,6 @@
   let addStatus = $state<string | null>(null);
 
   const categories = ['学习', '工作', '生活', '运动', '阅读', '其他'];
-
-  async function getCompletionHint(taskTitle: string): Promise<string> {
-    const config = $aiConfig;
-    if (!config.apiKey) return '';
-    try {
-      const result = await chatWithAI(
-        config,
-        `用户创建了任务："${taskTitle}"。请用一句话说明如何判断这个任务是否完成（15字以内）。例如："关闭文档即完成" 或 "运行测试通过即完成"。`
-      );
-      return result || '';
-    } catch {
-      return '';
-    }
-  }
 
   async function addTask() {
     if (!newTitle.trim()) return;
@@ -47,7 +33,6 @@
 
     try {
       await createTask(task);
-      tasks.add(task);
     } catch (e) {
       console.error('添加任务失败:', e);
     }

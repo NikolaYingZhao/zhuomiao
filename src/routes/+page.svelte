@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -9,12 +8,13 @@
   import ActivityChart from '$lib/components/ActivityChart.svelte';
   import QuickChat from '$lib/components/QuickChat.svelte';
   import {
-    petState, petMessage, isPanelOpen, isSettingsOpen,
+    isPanelOpen, isSettingsOpen,
     tasks, monitorRules, activeWindow, aiConfig, activityRecords
   } from '$lib/stores';
   import type { ActiveWindow, Task, MonitorRule, PetState, ActivityRecord } from '$lib/types';
-  import { loadAllFromDB, saveAll, setupAutoSave, toggleTask as persistToggleTask, createTask as persistCreateTask, removeTask as persistRemoveTask, updateTask as persistUpdateTask } from '$lib/services/persistence';
-  import { chatWithAI, classifyActivity } from '$lib/services/ai';
+  import { loadAllFromDB, saveAll, setupAutoSave, toggleTask as persistToggleTask, createTask as persistCreateTask, saveActivityRecords, calibrateActivityRecord } from '$lib/services/persistence';
+  import { chatWithAI, classifyActivity, getCompletionHint } from '$lib/services/ai';
+  import { initStoreSync } from '$lib/services/sync';
 
   let showBubble = $state(false);
   let currentMessage = $state('');
@@ -25,43 +25,57 @@
   let pendingConfirmTaskId = $state<string | null>(null);
   let showActivityChart = $state(false);
   let showExitMenu = $state(false);
+  let speechTimer: ReturnType<typeof setTimeout> | null = null;
 
   const appWindow = getCurrentWindow();
   const MONITOR_INTERVAL_MS = 45000;
+  const ALERT_COOLDOWN_MS = 30000;
+  const SPEECH_DURATION_MS = 5000;
 
   async function startDrag() {
     await appWindow.startDragging();
   }
 
   function showSpeech(msg: string, state: PetState = 'worried') {
+    if (speechTimer) clearTimeout(speechTimer);
     currentMessage = msg;
     currentPetState = state;
     showBubble = true;
-    setTimeout(() => { showBubble = false; currentPetState = 'idle'; }, 5000);
+    speechTimer = setTimeout(() => {
+      showBubble = false;
+      currentPetState = 'idle';
+      speechTimer = null;
+    }, SPEECH_DURATION_MS);
   }
 
+  // FIX: P0-B — 窗口关闭后无法再打开。getByLabel 返回 null 时重建窗口
   async function openPanel() {
     isPanelOpen.set(true);
     try {
       let panelWin = await WebviewWindow.getByLabel('panel');
-      if (!panelWin) {
+      if (panelWin) {
+        await panelWin.show();
+        await panelWin.setFocus();
+      } else {
+        // 窗口已被销毁，重新创建
         panelWin = new WebviewWindow('panel', {
           url: '/panel',
           title: '桌喵 - 任务面板',
           width: 420,
           height: 640,
-          decorations: true,
-          resizable: true,
           x: 400,
           y: 200,
+          resizable: true,
+        });
+        await panelWin.once('tauri://created', () => {
+          console.log('[pet] panel 窗口已重建');
+        });
+        await panelWin.once('tauri://error', (e) => {
+          console.error('[pet] panel 窗口重建失败:', e);
         });
       }
-      if (panelWin) {
-        await panelWin.show();
-        await panelWin.setFocus();
-      }
     } catch (e) {
-      console.error('打开面板失败:', e);
+      console.error('[pet] 打开面板失败:', e);
     }
   }
 
@@ -69,24 +83,29 @@
     isSettingsOpen.set(true);
     try {
       let settingsWin = await WebviewWindow.getByLabel('settings');
-      if (!settingsWin) {
+      if (settingsWin) {
+        await settingsWin.show();
+        await settingsWin.setFocus();
+      } else {
+        // 窗口已被销毁，重新创建
         settingsWin = new WebviewWindow('settings', {
           url: '/settings',
           title: '桌喵 - 设置',
           width: 480,
           height: 600,
-          decorations: true,
-          resizable: false,
           x: 500,
           y: 150,
+          resizable: false,
+        });
+        await settingsWin.once('tauri://created', () => {
+          console.log('[pet] settings 窗口已重建');
+        });
+        await settingsWin.once('tauri://error', (e) => {
+          console.error('[pet] settings 窗口重建失败:', e);
         });
       }
-      if (settingsWin) {
-        await settingsWin.show();
-        await settingsWin.setFocus();
-      }
     } catch (e) {
-      console.error('打开设置失败:', e);
+      console.error('[pet] 打开设置失败:', e);
     }
   }
 
@@ -112,7 +131,7 @@
       if (incomplete.length === 0) return;
 
       const now = Date.now();
-      if (now - lastAlertTime < 30000) return;
+      if (now - lastAlertTime < ALERT_COOLDOWN_MS) return;
 
       const target = `${win.title} ${win.processName}`.toLowerCase();
       let matched = false;
@@ -132,7 +151,6 @@
         if (matched) break;
       }
 
-      // 构建已完成任务 completionMethod 上下文
       const completed = currentTasks.filter(t => t.completed && t.completionMethod);
       let completionContext = '';
       if (completed.length > 0) {
@@ -146,11 +164,9 @@
       if (matched) {
         if (config.apiKey) {
           try {
-            // 先用 classifyActivity 获取结构化分类 + 活动类型
             const classification = await classifyActivity(
               config, win.title, win.processName, incomplete.map(t => t.title)
             );
-            // 再用 chatWithAI 获取可爱语气回复
             const taskList = incomplete.map(t => `- "${t.title}"（完成判断：${t.completionHint || t.title}）`).join('\n');
             const aiResult = await chatWithAI(
               config,
@@ -199,7 +215,6 @@ ${completionContext}
         }
       } else if (config.apiKey && incomplete.length > 0) {
         try {
-          // 先用 classifyActivity 获取结构化分类 + 活动类型
           const classification = await classifyActivity(
             config, win.title, win.processName, incomplete.map(t => t.title)
           );
@@ -261,27 +276,8 @@ ${completionContext}
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const filtered = current.filter(r => new Date(r.timestamp).getTime() > thirtyDaysAgo);
     filtered.push(record);
-    activityRecords.set(filtered);
 
-    try {
-      await invoke('save_app_data', { key: 'activity-records', data: filtered });
-    } catch (e) {
-      console.error('活动记录持久化失败:', e);
-    }
-  }
-
-  async function getCompletionHint(taskTitle: string): Promise<string> {
-    const config = $aiConfig;
-    if (!config.apiKey) return '';
-    try {
-      const result = await chatWithAI(
-        config,
-        `用户创建了任务："${taskTitle}"。请用一句话说明如何判断这个任务是否完成（15字以内）。例如："关闭文档即完成" 或 "运行测试通过即完成"。`
-      );
-      return result || '';
-    } catch {
-      return '';
-    }
+    await saveActivityRecords(filtered, record);
   }
 
   async function confirmTaskCompletion() {
@@ -310,27 +306,18 @@ ${completionContext}
         : r
     );
     activityRecords.set(updated);
-    try {
-      await invoke('save_app_data', { key: 'activity-records', data: updated });
-    } catch (e) {
-      console.error('校准持久化失败:', e);
-    }
+    await calibrateActivityRecord(record.id, newClassification);
   }
 
   onMount(() => {
+    let monitorTimer: ReturnType<typeof setInterval> | null = null;
+    let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+    let unlistenSync: (() => void) | null = null;
+
+    // FIX: P0 — 每个 async 步骤用 try-catch 包裹，初始化链路不会因单步失败而中断
+    // FIX: P2 — 删除 watchAndSyncStores，只保留 persistence 层显式广播
+    // FIX: P3 — 保存 initStoreSync 返回的 unlisten 函数
     loadAllFromDB().then(async () => {
-      try {
-        const data = await invoke<ActivityRecord[] | null>('load_app_data', { key: 'activity-records' });
-        if (data) activityRecords.set(data);
-      } catch { }
-      await invoke('start_monitor_cycle', { intervalSecs: 45 });
-
-      setInterval(checkActivity, MONITOR_INTERVAL_MS);
-
-      const unlisten = await listen<ActiveWindow>('active-window-changed', (event) => {
-        activeWindow.set(event.payload);
-      });
-
       if ($monitorRules.length === 0) {
         const defaultRules: MonitorRule[] = [
           {
@@ -351,10 +338,24 @@ ${completionContext}
         monitorRules.set(defaultRules);
       }
 
-      setupAutoSave(5000);
+      monitorTimer = setInterval(checkActivity, MONITOR_INTERVAL_MS);
+      autoSaveTimer = setupAutoSave(5000);
 
-      return unlisten;
+      try {
+        unlistenSync = await initStoreSync();
+      } catch (e) {
+        console.error('[pet] initStoreSync 失败:', e);
+      }
+    }).catch((e) => {
+      console.error('[pet] loadAllFromDB 失败:', e);
     });
+
+    return () => {
+      if (monitorTimer) clearInterval(monitorTimer);
+      if (autoSaveTimer) clearInterval(autoSaveTimer);
+      if (speechTimer) clearTimeout(speechTimer);
+      if (unlistenSync) unlistenSync();
+    };
   });
 
   function handleContextMenu(e: MouseEvent) {
@@ -400,7 +401,6 @@ ${completionContext}
 
     try {
       await persistCreateTask(task);
-      tasks.add(task);
     } catch (e) {
       console.error('快速添加任务失败:', e);
     }
@@ -662,13 +662,12 @@ ${completionContext}
   .chart-panel {
     position: absolute;
     bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 8px;
+    right: 8px;
     background: white;
     border-radius: 10px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-    width: 420px;
-    max-height: 600px;
+    max-height: 280px;
     overflow-y: auto;
     z-index: 100;
   }

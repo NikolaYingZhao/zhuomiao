@@ -5,11 +5,11 @@ use tauri::State;
 
 #[tauri::command]
 pub async fn db_config_get(state: State<'_, DbState>) -> Result<Option<Value>, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     let row = sqlx::query_as::<_, DbAiConfig>(
         r#"SELECT id, provider, endpoint, api_key, model, system_prompt FROM ai_config WHERE id = 1"#,
     )
-    .fetch_optional(pool)
+    .fetch_optional(&pool)
     .await
     .map_err(|e| format!("查询AI配置失败: {}", e))?;
 
@@ -32,7 +32,7 @@ pub async fn db_config_get(state: State<'_, DbState>) -> Result<Option<Value>, S
 
 #[tauri::command]
 pub async fn db_config_save(state: State<'_, DbState>, config: Value) -> Result<(), String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
 
     let provider = config.get("provider").and_then(|v| v.as_str()).unwrap_or("openai");
     let endpoint = config.get("endpoint").and_then(|v| v.as_str()).unwrap_or("https://api.openai.com/v1");
@@ -50,7 +50,7 @@ pub async fn db_config_save(state: State<'_, DbState>, config: Value) -> Result<
     .bind(api_key)
     .bind(model)
     .bind(system_prompt)
-    .execute(pool)
+    .execute(&pool)
     .await
     .map_err(|e| format!("保存AI配置失败: {}", e))?;
 
@@ -67,10 +67,19 @@ pub async fn db_status(state: State<'_, DbState>) -> Result<DbStatusInfo, String
 
 #[tauri::command]
 pub async fn db_connect(state: State<'_, DbState>, database_url: String) -> Result<DbStatusInfo, String> {
-    let _ = crate::db::DbState::connect(&database_url).await.map_err(|e| e.clone())?;
-    state.set_file_mode(false);
+    let new_state = crate::db::DbState::connect(&database_url).await
+        .map_err(|e| format!("连接失败: {}", e))?;
+
+    if let Some(pool) = new_state.pool() {
+        crate::db::run_migrations(&pool).await
+            .map_err(|e| format!("迁移失败: {}", e))?;
+        state.replace_pool(Some(pool));
+    } else {
+        state.replace_pool(None);
+    }
+
     Ok(DbStatusInfo {
-        available: true,
-        mode: "mysql".to_string(),
+        available: state.is_available(),
+        mode: if state.is_file_mode() { "file".to_string() } else { "mysql".to_string() },
     })
 }

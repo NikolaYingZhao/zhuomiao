@@ -30,22 +30,23 @@ ${taskList}
 }
 
 export function parseChatResponse(raw: string): ChatResponse {
-  let action: TaskAction | undefined;
+  const actions: TaskAction[] = [];
   let message = raw;
 
-  const completeMatch = raw.match(/\[COMPLETE:([^\]]+)\]/);
-  if (completeMatch) {
-    action = { type: 'complete', taskId: completeMatch[1] };
-    message = message.replace(completeMatch[0], '').trim();
+  const completeRegex = /\[COMPLETE:([^\]]+)\]/g;
+  let match;
+  while ((match = completeRegex.exec(raw)) !== null) {
+    actions.push({ type: 'complete', taskId: match[1] });
+    message = message.replace(match[0], '');
   }
 
-  const hintMatch = raw.match(/\[HINT:([^\]]+):([^\]]+)\]/);
-  if (hintMatch) {
-    action = { type: 'updateHint', taskId: hintMatch[1], newHint: hintMatch[2] };
-    message = message.replace(hintMatch[0], '').trim();
+  const hintRegex = /\[HINT:([^\]]+):([^\]]+)\]/g;
+  while ((match = hintRegex.exec(raw)) !== null) {
+    actions.push({ type: 'updateHint', taskId: match[1], newHint: match[2] });
+    message = message.replace(match[0], '');
   }
 
-  return { message, action };
+  return { message: message.trim(), actions };
 }
 
 export async function chatWithTaskContext(

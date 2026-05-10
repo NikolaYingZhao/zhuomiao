@@ -9,7 +9,7 @@ pub async fn migrate_from_json(
     app: tauri::AppHandle,
     state: State<'_, DbState>,
 ) -> Result<MigrationReport, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     let dir = crate::resolve_data_dir(&app);
 
     let mut report = MigrationReport {
@@ -43,7 +43,7 @@ pub async fn migrate_from_json(
                     .bind(task.get("createdAt").and_then(|v| v.as_str()).unwrap_or(""))
                     .bind(task.get("completionHint").and_then(|v| v.as_str()))
                     .bind(task.get("completionMethod").and_then(|v| v.as_str()))
-                    .execute(pool)
+                    .execute(&pool)
                     .await
                     {
                         Ok(result) => {
@@ -78,7 +78,7 @@ pub async fn migrate_from_json(
                     .bind(rule.get("ruleType").and_then(|v| v.as_str()).unwrap_or("url"))
                     .bind(rule.get("isBlacklist").and_then(|v| v.as_bool()).unwrap_or(true) as i8)
                     .bind(rule.get("message").and_then(|v| v.as_str()).unwrap_or(""))
-                    .execute(pool)
+                    .execute(&pool)
                     .await;
                 }
             }
@@ -99,7 +99,7 @@ pub async fn migrate_from_json(
                 .bind(config.get("apiKey").and_then(|v| v.as_str()).unwrap_or(""))
                 .bind(config.get("model").and_then(|v| v.as_str()).unwrap_or("gpt-4o-mini"))
                 .bind(config.get("systemPrompt").and_then(|v| v.as_str()).unwrap_or(""))
-                .execute(pool)
+                .execute(&pool)
                 .await;
             }
         }

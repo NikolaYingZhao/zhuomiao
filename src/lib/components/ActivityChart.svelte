@@ -76,7 +76,7 @@
   const totalSlacking = $derived(data.reduce((s, d) => s + d.slacking, 0));
 
   // Aggregate all activity types for the day
-  const allTypes = $derived(() => {
+  const allTypes = $derived.by(() => {
     const types = new Map<string, { count: number; classification: string }>();
     for (const d of data) {
       for (const item of d.items) {
@@ -128,9 +128,9 @@
   </div>
 
   <!-- Activity type breakdown -->
-  {#if allTypes().size > 0}
+  {#if allTypes.size > 0}
     <div class="type-summary">
-      {#each [...allTypes().entries()] as [type, info] (type)}
+      {#each [...allTypes.entries()] as [type, info] (type)}
         <span class="type-tag" style="background: {getTypeColor(type)}18; border-color: {getTypeColor(type)}40; color: {getTypeColor(type)}">
           <span class="type-dot" style="background: {getTypeColor(type)}"></span>
           {type}: {info.count}次
@@ -213,7 +213,6 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    max-height: calc(100% - 40px);
     overflow-y: auto;
   }
   .chart-header {
@@ -330,7 +329,7 @@
     margin-top: 12px;
     border-top: 1px solid #eee;
     padding-top: 8px;
-    max-height: 200px;
+    max-height: 150px;
     overflow-y: auto;
   }
   .record-list h4 {

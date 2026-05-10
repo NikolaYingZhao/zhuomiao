@@ -51,8 +51,10 @@
       };
       chatMessages = [...chatMessages, assistantMsg];
 
-      if (response.action) {
-        await executeTaskAction(response.action);
+      if (response.actions.length > 0) {
+        for (const action of response.actions) {
+          await executeTaskAction(action);
+        }
       }
     } catch {
       const errorMsg: ChatMessage = {

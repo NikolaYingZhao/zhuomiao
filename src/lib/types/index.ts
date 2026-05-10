@@ -61,7 +61,7 @@ export type TaskAction =
 
 export interface ChatResponse {
   message: string;
-  action?: TaskAction;
+  actions: TaskAction[];
 }
 
 export interface DbStatusInfo {

@@ -4,7 +4,7 @@ use tauri::State;
 
 #[tauri::command]
 pub async fn db_task_create(state: State<'_, DbState>, task: TaskInput) -> Result<DbTask, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     sqlx::query_as::<_, DbTask>(
         r#"INSERT INTO tasks (id, title, category, priority, due_date, completed, created_at, completion_hint, completion_method)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -19,17 +19,17 @@ pub async fn db_task_create(state: State<'_, DbState>, task: TaskInput) -> Resul
     .bind(&task.created_at)
     .bind(&task.completion_hint)
     .bind(&task.completion_method)
-    .fetch_one(pool)
+    .fetch_one(&pool)
     .await
     .map_err(|e| format!("创建任务失败: {}", e))
 }
 
 #[tauri::command]
 pub async fn db_task_remove(state: State<'_, DbState>, id: String) -> Result<(), String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     sqlx::query("DELETE FROM tasks WHERE id = ?")
         .bind(&id)
-        .execute(pool)
+        .execute(&pool)
         .await
         .map_err(|e| format!("删除任务失败: {}", e))?;
     Ok(())
@@ -37,7 +37,7 @@ pub async fn db_task_remove(state: State<'_, DbState>, id: String) -> Result<(),
 
 #[tauri::command]
 pub async fn db_task_update(state: State<'_, DbState>, id: String, patch: TaskPatch) -> Result<DbTask, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
 
     let mut sets = Vec::new();
 
@@ -79,33 +79,33 @@ pub async fn db_task_update(state: State<'_, DbState>, id: String, patch: TaskPa
     }
     query = query.bind(&id);
 
-    query.execute(pool).await.map_err(|e| format!("更新任务失败: {}", e))?;
+    query.execute(&pool).await.map_err(|e| format!("更新任务失败: {}", e))?;
 
     sqlx::query_as::<_, DbTask>(
         r#"SELECT id, title, category, priority, due_date, completed, created_at, completion_hint, completion_method FROM tasks WHERE id = ?"#,
     )
     .bind(&id)
-    .fetch_one(pool)
+    .fetch_one(&pool)
     .await
     .map_err(|e| format!("查询更新后任务失败: {}", e))
 }
 
 #[tauri::command]
 pub async fn db_task_list(state: State<'_, DbState>) -> Result<Vec<DbTask>, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     sqlx::query_as::<_, DbTask>(
         r#"SELECT id, title, category, priority, due_date, completed, created_at, completion_hint, completion_method FROM tasks ORDER BY created_at DESC"#,
     )
-    .fetch_all(pool)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("查询任务列表失败: {}", e))
 }
 
 #[tauri::command]
 pub async fn db_task_clear_completed(state: State<'_, DbState>) -> Result<u64, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     let result = sqlx::query("DELETE FROM tasks WHERE completed = 1")
-        .execute(pool)
+        .execute(&pool)
         .await
         .map_err(|e| format!("清除已完成任务失败: {}", e))?;
     Ok(result.rows_affected())
@@ -113,12 +113,12 @@ pub async fn db_task_clear_completed(state: State<'_, DbState>) -> Result<u64, S
 
 #[tauri::command]
 pub async fn db_task_toggle(state: State<'_, DbState>, id: String, completed: bool, completion_method: Option<String>) -> Result<DbTask, String> {
-    let pool = state.pool().ok_or("数据库连接不可用".to_string())?;
+    let pool = state.check_pool()?;
     sqlx::query("UPDATE tasks SET completed = ?, completion_method = ? WHERE id = ?")
         .bind(completed)
         .bind(&completion_method)
         .bind(&id)
-        .execute(pool)
+        .execute(&pool)
         .await
         .map_err(|e| format!("切换任务状态失败: {}", e))?;
 
@@ -126,7 +126,7 @@ pub async fn db_task_toggle(state: State<'_, DbState>, id: String, completed: bo
         r#"SELECT id, title, category, priority, due_date, completed, created_at, completion_hint, completion_method FROM tasks WHERE id = ?"#,
     )
     .bind(&id)
-    .fetch_one(pool)
+    .fetch_one(&pool)
     .await
     .map_err(|e| format!("查询任务失败: {}", e))
 }

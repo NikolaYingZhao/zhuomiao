@@ -1,7 +1,7 @@
 <script lang="ts">
   import { aiConfig, monitorRules } from '$lib/stores';
   import type { AIConfig, MonitorRule } from '$lib/types';
-  import { getDataDir, setDataDir, saveAll } from '$lib/services/persistence';
+  import { getDataDir, setDataDir, saveAiConfig as persistAiConfig, saveMonitorRules as persistMonitorRules } from '$lib/services/persistence';
   import type { AppDataDir } from '$lib/services/persistence';
   import { open } from '@tauri-apps/plugin-dialog';
   import { validateAiConfig } from '$lib/services/ai';
@@ -79,7 +79,7 @@
       aiConfig.set(localAiConfig);
 
       try {
-        await saveAll();
+        await persistAiConfig();
         saveStatus = 'success:API 配置成功！';
         setTimeout(() => { saveStatus = null; }, 5000);
       } catch (e: any) {
@@ -133,13 +133,13 @@
     localRules = [...localRules, rule];
     monitorRules.set(localRules);
     newPattern = '';
-    await saveAll();
+    await persistMonitorRules();
   }
 
   async function removeRule(id: string) {
     localRules = localRules.filter(r => r.id !== id);
     monitorRules.set(localRules);
-    await saveAll();
+    await persistMonitorRules();
   }
 </script>
 
@@ -154,16 +154,18 @@
     <div class="section">
       <h3>通用设置</h3>
       <div class="field inline-field">
-        <input type="checkbox" id="autostart" />
-        <label for="autostart">开机自启动</label>
+        <input type="checkbox" id="autostart" disabled />
+        <label for="autostart">开机自启动 <span class="hint">（即将支持）</span></label>
       </div>
       <div class="field">
         <label>监控检查间隔（秒）</label>
-        <input type="number" value="45" min="5" max="300" />
+        <input type="number" value="45" min="5" max="300" disabled />
+        <span class="hint">即将支持自定义</span>
       </div>
       <div class="field">
         <label>提醒气泡显示时长（秒）</label>
-        <input type="number" value="5" min="1" max="30" />
+        <input type="number" value="5" min="1" max="30" disabled />
+        <span class="hint">即将支持自定义</span>
       </div>
     </div>
     <div class="section">

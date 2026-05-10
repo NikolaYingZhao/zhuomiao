@@ -6,8 +6,7 @@ use commands::{task, activity, rule, config, migration};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::time::Duration;
-use tauri::{Emitter, Manager, menu::{Menu, MenuItem}, tray::TrayIconBuilder};
+use tauri::{Manager, menu::{Menu, MenuItem}, tray::TrayIconBuilder};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -15,28 +14,6 @@ pub struct ActiveWindow {
     title: String,
     process_name: String,
     process_id: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Task {
-    id: String,
-    title: String,
-    category: String,
-    priority: String,
-    due_date: Option<String>,
-    completed: bool,
-    created_at: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct MonitorRule {
-    id: String,
-    pattern: String,
-    rule_type: String,
-    is_blacklist: bool,
-    message: String,
 }
 
 #[tauri::command]
@@ -99,44 +76,6 @@ fn get_active_window() -> Result<ActiveWindow, String> {
             process_id: 0,
         })
     }
-}
-
-#[tauri::command]
-fn check_fish_detection(
-    active_window: ActiveWindow,
-    rules: Vec<MonitorRule>,
-    current_tasks: Vec<Task>,
-) -> Option<String> {
-    let target = format!("{} {}", active_window.title, active_window.process_name).to_lowercase();
-
-    for rule in &rules {
-        if rule.is_blacklist {
-            let patterns: Vec<&str> = rule.pattern.split(',').map(|s| s.trim()).collect();
-            for pattern in patterns {
-                if target.contains(&pattern.to_lowercase()) {
-                    if !current_tasks.is_empty() {
-                        let incomplete: Vec<&Task> = current_tasks.iter().filter(|t| !t.completed).collect();
-                        if !incomplete.is_empty() {
-                            return Some(rule.message.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-#[tauri::command]
-fn start_monitor_cycle(app_handle: tauri::AppHandle, interval_secs: u64) {
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(Duration::from_secs(interval_secs));
-            if let Ok(window) = get_active_window() {
-                let _ = app_handle.emit("active-window-changed", &window);
-            }
-        }
-    });
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -247,11 +186,10 @@ pub fn run() {
 
     let db_state = match std::env::var("DATABASE_URL") {
         Ok(url) => {
-            let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
-            match rt.block_on(async {
+            match tauri::async_runtime::block_on(async {
                 let state = db::DbState::connect(&url).await?;
                 if let Some(pool) = state.pool() {
-                    db::run_migrations(pool).await?;
+                    db::run_migrations(&pool).await?;
                 }
                 Ok::<db::DbState, String>(state)
             }) {
@@ -275,8 +213,6 @@ pub fn run() {
         .manage(db_state)
         .invoke_handler(tauri::generate_handler![
             get_active_window,
-            check_fish_detection,
-            start_monitor_cycle,
             get_data_dir,
             set_data_dir,
             save_app_data,

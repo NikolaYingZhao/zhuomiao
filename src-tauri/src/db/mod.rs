@@ -1,15 +1,16 @@
 use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 
 pub struct DbState {
-    pool: Option<MySqlPool>,
+    pool: Arc<RwLock<Option<MySqlPool>>>,
     is_file_mode: AtomicBool,
 }
 
 impl DbState {
     pub fn file_mode() -> Self {
         Self {
-            pool: None,
+            pool: Arc::new(RwLock::new(None)),
             is_file_mode: AtomicBool::new(true),
         }
     }
@@ -23,28 +24,37 @@ impl DbState {
             .map_err(|e| format!("数据库连接失败: {}", e))?;
 
         Ok(Self {
-            pool: Some(pool),
+            pool: Arc::new(RwLock::new(Some(pool))),
             is_file_mode: AtomicBool::new(false),
         })
     }
 
-    pub fn pool(&self) -> Option<&MySqlPool> {
+    pub fn pool(&self) -> Option<MySqlPool> {
         if self.is_file_mode.load(Ordering::Relaxed) {
             return None;
         }
-        self.pool.as_ref()
+        let guard = self.pool.read().unwrap();
+        guard.as_ref().cloned()
+    }
+
+    // FIX: P5 — 统一的 pool 检查方法，所有 DB 命令复用，确保错误信息一致
+    pub fn check_pool(&self) -> Result<MySqlPool, String> {
+        self.pool().ok_or_else(|| "数据库连接不可用".to_string())
+    }
+
+    pub fn replace_pool(&self, new_pool: Option<MySqlPool>) {
+        let mut guard = self.pool.write().unwrap();
+        *guard = new_pool;
+        self.is_file_mode.store(guard.is_none(), Ordering::Relaxed);
     }
 
     pub fn is_available(&self) -> bool {
-        self.pool.is_some() && !self.is_file_mode.load(Ordering::Relaxed)
+        let guard = self.pool.read().unwrap();
+        guard.is_some() && !self.is_file_mode.load(Ordering::Relaxed)
     }
 
     pub fn is_file_mode(&self) -> bool {
         self.is_file_mode.load(Ordering::Relaxed)
-    }
-
-    pub fn set_file_mode(&self, mode: bool) {
-        self.is_file_mode.store(mode, Ordering::Relaxed);
     }
 }
 

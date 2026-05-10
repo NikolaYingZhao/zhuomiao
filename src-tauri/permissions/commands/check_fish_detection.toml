@@ -1,9 +1,0 @@
-[[permission]]
-identifier = "allow-check-fish-detection"
-description = "Enables the check_fish_detection command without any pre-configured scope."
-commands.allow = ["check_fish_detection"]
-
-[[permission]]
-identifier = "deny-check-fish-detection"
-description = "Denies the check_fish_detection command without any pre-configured scope."
-commands.deny = ["check_fish_detection"]

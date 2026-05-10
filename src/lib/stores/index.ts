@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { Task, PetState, MonitorRule, AIConfig, ActiveWindow, ActivityRecord, ChatMessage, DbStatusInfo } from '$lib/types';
+import type { Task, MonitorRule, AIConfig, ActiveWindow, ActivityRecord, ChatMessage, DbStatusInfo } from '$lib/types';
 
 function createTaskStore() {
   const { subscribe, set, update } = writable<Task[]>([]);
@@ -49,8 +49,6 @@ export const tasksByCategory = derived(tasks, $tasks => {
   return map;
 });
 
-export const petState = writable<PetState>('idle');
-export const petMessage = writable<string>('');
 export const isPanelOpen = writable(false);
 export const isSettingsOpen = writable(false);
 export const monitorRules = writable<MonitorRule[]>([]);

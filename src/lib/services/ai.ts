@@ -1,4 +1,6 @@
 import type { AIConfig, ActivityClassification, ClassificationSource } from '$lib/types';
+import { get } from 'svelte/store';
+import { aiConfig } from '$lib/stores';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -233,6 +235,20 @@ function getFallbackResponse(message: string): string {
     '桌喵在监督你哦～不要摸鱼！',
     '加油！你可以的！',
   ]);
+}
+
+export async function getCompletionHint(taskTitle: string): Promise<string> {
+  const config = get(aiConfig);
+  if (!config.apiKey) return '';
+  try {
+    const result = await chatWithAI(
+      config,
+      `用户创建了任务："${taskTitle}"。请用一句话说明如何判断这个任务是否完成（15字以内）。例如："关闭文档即完成" 或 "运行测试通过即完成"。`
+    );
+    return result || '';
+  } catch {
+    return '';
+  }
 }
 
 function pickRandom<T>(arr: T[]): T {
